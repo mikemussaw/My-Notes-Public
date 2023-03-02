@@ -1,0 +1,129 @@
+DISM - Wim Files
+----------------
+
+Capturing A Windows OS Using DISM
+---------------------------------
+1. Create a folder to store your captured .wim file of the Windows OS.
+	A. Create/Place it in your C:\ drive.
+	B. Or while capturing the Windows OS image you can place it on your external drive/network share folder.
+
+2. Place Windows 10 OS boot disc into computer.
+	A. Access WinPE.
+		i. After inputting the Windows 10 boot disc go through the wizard and click "Repair Computer".
+		ii. You need to go into the troubleshoot --> command prompt.
+3. Command Prompt.
+	A. Your working directory will now be "X:\".
+		i. This is within the Windows 10 WinPE environment.
+	B. Utilize "Disk part" tool within DISM to list/find all drive letters.
+		i. "List volume"
+			1. WinPE will change your Windows 10 OS image C:\ drive to a NEW drive letter. You need to find out which drive letter that is.
+	C. Capture Windows 10 Image. Save to which location?
+		i. Save to a network location. (Must be connected via switch)
+			1. net use \\IPAddress
+				A. Enter User credentials.
+			2. dism /capture-image /imagefile:\\"Network\Share\Path\Location\FileName.wim" /capturedir:"NetworkDriveLetter:\" /name:"ImageDescriptionName"
+		ii. Save to an external hard drive.
+			1. After using "Disk Part" and after listing the volume. Find out what drive letter is your external hard drive and save it there.
+			2. dism /capture-image /imagefile:"ExternalHardDriveLetter:\location\folder\CaptureWimFile.wim" /capturedir:"NewDriveLetterOfWin10ImageCdrive:\" /name:"ImageDescriptionName"
+		iii. You can place your captured Win 10 OS image (now .wim file) into the same drive of the Win 10 OS image your capturing. (See below)
+			1. dism /capture-image /imagefile:"LocationOfWhereYouWantTheCaptureWimFileToBe.wim" /capturedir:"NewDriveLetterOfWin10ImageCdrive:\" /name:"ImageDescriptionName"
+
+
+Customize Windows 10 OS
+-----------------------
+
+**IMPORTANT**: Extract the "install.wim" file out of the mounted ISO image into a folder. 
+
+1. Obtain OS specific edition information on source .wim:
+	A. dism /get-wiminfo /wimfile:"driveletter:\sources\install.wim"
+		i. You want to know the index of the .wim file. Example= index:3 (Enterprise Ed.)
+
+2. Extract Windows OS specific edition from Source .wim File:
+	A. Dism /Export-Image /SourceImageFile:"C:\Location of Source wim\install.wim" /SourceIndex:3 /DestinationImageFile:"C:\Location of desination wim file\install.wim"
+		i. MUST include the "\install.wim" in command for the source and destination.
+		ii. Even tho you took out index 3 for example from source wim file and look into the "extracted" index .wim file it will start at index 1 again. FYI
+
+3. Mount your source/specific Windows OS .wim file:
+	A. dism /Mount-Wim /wimfile:"driveletter:\Location of Source wim file\install.wim" /index:1 /MountDir:"driveletter:\Destination Location\FolderName"
+		i. Source WIM file is the from the orginal ISO COPIED to local drive. Then, picking a version of OS to mount.
+		ii. The "Mount" folder MUST exist already before doing command above.
+		iii. If you want to re-mount specific Windows OS edition to mounting folder. That specific edition is now index 1 after pulling out from source.
+
+4. Get settings for Mounted Windows .wim file:
+	A. Dism /Get-MountedImageInfo
+		i. This will only work if you have a mounted .wim file already.
+		ii. I use this command on the source (ISO) install.wim file to look at the read/write permissions, so I can modify to a custom .wim file.
+
+**Optional**:
+-------------
+Add .Net Framework to mounted .Wim file:
+1. dism /Image:"driveletter:\Location of wim mounted folder" /Enable-Feature /FeatureName:NetFx3 /All /LimitAccess /Source:"driveletter:\sources\sxs"
+	A. Make a copy of your specific OS edition wim file to another folder and modify the extra copy.  
+	B. Mount orginal ISO file of your Windows OS to a drive and add the path of wim to the "/Source:" portion of this command above.
+	C.  In sum, your mounting your custom .wim file to a folder and orginal ISO of the Window OS to a drive. Your using the mounted ISO as a source to get the .net and injecting it into your mounted folder of your custom wim file.
+
+Verify which Windows Updates are installed:
+1. Dism /Get-Packages /image:"driveletter:\MountedFolderName"
+	A. Use " | clip" at the end of the command to copy to clipboard and paste it in a text document.
+	B. Inject Windows OS updates into WIM file.
+		i. dism /Image:"driverletter:\MountedFolderName" /LogPath:"AddYourDesktopForLogs.log" /Add-Package /PackagePath:"driveletter:\PathToKBUpdate.msu"
+
+Verify which Windows drivers are installed:
+1. dism /image:"driveletter:\MountedFolderName" /Get-Drivers
+	A. Use " | clip" at the end of the command to copy to clipboard and paste it in a text document.
+
+Verify which Windows Appx's are installed:
+1. dism /image:"driveletter:\MountedFolderName" /Get-ProvisionedAppxPackages
+	A. Use " | clip" at the end of the command to copy to clipboard and paste it in a text document.
+	B. Use this command below to remove App's.
+		i. Dism /Image:"driveletter:\MountedFolderName" /Remove-ProvisionedAppxPackage /PackageName:"Name of Package"
+
+Verify which Windows Feature's are installed: (.NetFramework)
+1. Dism /Image:"driveletter:\Location of mounted .wim folder" /Get-Features /Format:Table
+
+Inject RSAT into Wim File:
+1. Exract RSAT files from Windows 10 FOD iso or Windows 10 version iso and place in a folder.
+2. Mount specific version of Windows 10 (.wim) to a folder. (Look above to see how)
+3. In PowerShell as admin, run these commands:  
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.BitLocker.Recovery.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.CertificateServices.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.DHCP.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.Dns.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.FileServices.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.IPAM.Client.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.NetworkController.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.NetworkLoadBalancing.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.RemoteAccess.Management.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.RemoteDesktop.Services.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.ServerManager.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.Shielded.VM.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.StorageMigrationService.Management.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.StorageReplica.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.SystemInsights.Management.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.VolumeActivation.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.WSUS.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+		Not needed below
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.FailoverCluster.Management.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+	Add-WindowsCapability -Path "C:\Your\Mounted\WIM_Folder" -Name "Rsat.LLDP.Tools~~~~0.0.1.0" -Source "C:\Your\Folder\of\RSAT_CAB_Files" -LimitAccess
+
+
+Remove OneDrive:
+	1. Modify Registry.
+		A. After you mount your WIM. Go to "<mountdir>\Windows\syswow64\onedrivesetup.exe". Then DELETE the setup.exe!
+		B. Load mounted Windows OS WIM registry in CMD.
+			i. "reg load HKLM\test <mountdir>\Users\default\ntuser.dat"
+			ii. Then go to your regedit on your running system via search bar.
+				1. Look for "HKLM\test\Software\Microsoft\Windows\CurrentVersion\Run\OneDriveSetup" and delete registry entry.
+			iii. "reg unload HKLM\test"
+
+Disable Microsoft Windows PowerShell V2:
+1. dism /Image:"driveletter:\MountedFolderName" /Disable-Feature /FeatureName:"MicrosoftWindowsPowerShellV2"
+2. dism /Image:"driveletter:\MountedFolderName" /Disable-Feature /FeatureName:"MicrosoftWindowsPowerShellV2Root"
+
+5.Unmount your Windows OS .wim file:
+	A. dism /Unmount-image /MountDir:"driveletter:\Destination Location\FolderName"
+		i. /commit - Add this at the end to save any changes.
+		ii. /discard - Add this at the end to discard everything and unmount.
+		iii. Make sure to close the folder before you unmount. Error: 0xc1420117
